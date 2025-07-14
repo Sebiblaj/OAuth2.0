@@ -5,7 +5,7 @@ import jakarta.servlet.http.HttpServletResponse;
 import org.example.oauthmetaapp.BusinessLayer.MetaService;
 import org.example.oauthmetaapp.Entities.FacebookUser;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -17,29 +17,19 @@ import java.io.IOException;
 @RequestMapping(value = "myapp")
 public class ApplicationController {
 
-    @Value(value = "${redirect-home-uri}")
-    private String redirectHomeUri;
-
     @Autowired
     private MetaService metaService;
 
     @GetMapping(value = "info")
-    public void store(HttpServletRequest request, HttpServletResponse response) throws IOException {
+    public ResponseEntity<?> store(HttpServletRequest request){
 
-        String access_token = metaService.checkAccessToken(request);
-        if (access_token == null) { response.sendError(HttpServletResponse.SC_BAD_REQUEST, "Invalid access token"); }
+        String token = metaService.getAccessToken(request);
+        if (token == null || token.isEmpty()) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("Access token missing");
+        }
 
-        metaService.fetchUserData(request,access_token);
+        return ResponseEntity.ok(metaService.fetchUserData(request,token));
 
-        response.sendRedirect(redirectHomeUri);
-
-    }
-
-    @GetMapping(value = "home")
-    public ResponseEntity<FacebookUser> home() {
-        FacebookUser facebookUser = metaService.getUser();
-
-        return facebookUser != null ? ResponseEntity.ok(facebookUser) : ResponseEntity.notFound().build();
     }
 
 

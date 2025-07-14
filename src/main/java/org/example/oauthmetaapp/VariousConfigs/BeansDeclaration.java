@@ -13,4 +13,5 @@ public class BeansDeclaration {
 
     @Bean
     public ObjectMapper objectMapper() { return new ObjectMapper(); }
+
 }

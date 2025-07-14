@@ -1,12 +1,16 @@
 package org.example.oauthmetaapp.BusinessLayer;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.RuntimeJsonMappingException;
 import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
 import jakarta.servlet.http.HttpSession;
+import org.example.oauthmetaapp.Entities.AccessTokenDTO;
 import org.example.oauthmetaapp.Entities.FacebookUser;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.ResponseCookie;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
@@ -18,9 +22,10 @@ import org.springframework.web.client.RestTemplate;
 import org.springframework.web.util.UriComponentsBuilder;
 
 
+import java.io.IOException;
+import java.time.Duration;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 
 @Service
 @SuppressWarnings(value = {"unused","unchecked"})
@@ -71,16 +76,26 @@ public class MetaService {
                 .toUriString();
     }
 
-    public String buildAccessTokenURI(String authCode){
-        return UriComponentsBuilder.fromUriString(tokenUri)
-                .queryParam("client_id",clientId)
-                .queryParam("redirect_uri",redirectUri)
-                .queryParam("client_secret",clientSecret)
-                .queryParam("code",authCode)
-                .build().toUriString();
+    public void returnClientInfo(String authCode,HttpServletRequest request,HttpServletResponse response){
+
+        String accessTokenUri =  buildAccessTokenURI(authCode);
+        AccessTokenDTO accessTokenDTO = restTemplate.getForObject(accessTokenUri, AccessTokenDTO.class);
+
+        if(accessTokenDTO == null){
+            throw new RuntimeJsonMappingException("The access token could not be found");
+        }
+
+        ResponseCookie responseCookie = ResponseCookie.from("meta_access_token",accessTokenDTO.getAccess_token())
+                .httpOnly(true)
+                .secure(false)
+                .path("/")
+                .maxAge(Duration.ofSeconds(accessTokenDTO.getExpires_in()))
+                .sameSite("Lax")
+                .build();
+
     }
 
-    public void fetchUserData(HttpServletRequest request,String accessToken) {
+    public FacebookUser fetchUserData(HttpServletRequest request,String accessToken) {
 
         String uri = UriComponentsBuilder.fromUriString(userInfoUri)
                 .queryParam("fields", fields)
@@ -115,21 +130,28 @@ public class MetaService {
                 context
         );
 
+        return user;
 
     }
 
-    public FacebookUser getUser() {
-        return (FacebookUser) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
+    public  String getAccessToken(HttpServletRequest request) {
+        if (request.getCookies() == null) return null;
 
+        for (Cookie cookie : request.getCookies()) {
+            if ("meta_access_token".equals(cookie.getName())) {
+                return cookie.getValue();
+            }
+        }
+        return null;
     }
 
-    public String checkAccessToken(HttpServletRequest request) {
-
-        List<Cookie> cookies = List.of(request.getCookies());
-        if (cookies.isEmpty()) { return null;}
-        Optional<Cookie> desiredCookie = cookies.stream().filter(cookie -> cookie.getName().equals("meta_access_token")).findAny();
-        return desiredCookie.map(Cookie::getValue).orElse(null);
-
+    private String buildAccessTokenURI(String authCode){
+        return UriComponentsBuilder.fromUriString(tokenUri)
+                .queryParam("client_id",clientId)
+                .queryParam("redirect_uri",redirectUri)
+                .queryParam("client_secret",clientSecret)
+                .queryParam("code",authCode)
+                .build().toUriString();
     }
 
 }
