@@ -57,4 +57,8 @@ public class FacebookUser {
     public void setPicture(String picture) {
         this.picture = picture;
     }
+
+    public boolean isEmpty(){
+        return id == null && firstName == null && lastName == null && email == null && picture == null;
+    }
 }

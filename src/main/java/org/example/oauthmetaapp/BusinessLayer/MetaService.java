@@ -5,7 +5,6 @@ import com.fasterxml.jackson.databind.RuntimeJsonMappingException;
 import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
-import jakarta.servlet.http.HttpSession;
 import org.example.oauthmetaapp.Entities.AccessTokenDTO;
 import org.example.oauthmetaapp.Entities.FacebookUser;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -22,7 +21,6 @@ import org.springframework.web.client.RestTemplate;
 import org.springframework.web.util.UriComponentsBuilder;
 
 
-import java.io.IOException;
 import java.time.Duration;
 import java.util.List;
 import java.util.Map;
@@ -76,7 +74,7 @@ public class MetaService {
                 .toUriString();
     }
 
-    public void returnClientInfo(String authCode,HttpServletRequest request,HttpServletResponse response){
+    public String returnAccessToken(String authCode, HttpServletRequest request, HttpServletResponse response){
 
         String accessTokenUri =  buildAccessTokenURI(authCode);
         AccessTokenDTO accessTokenDTO = restTemplate.getForObject(accessTokenUri, AccessTokenDTO.class);
@@ -93,9 +91,12 @@ public class MetaService {
                 .sameSite("Lax")
                 .build();
 
+        response.addHeader("Set-Cookie", responseCookie.toString());
+
+        return accessTokenDTO.getAccess_token();
     }
 
-    public FacebookUser fetchUserData(HttpServletRequest request,String accessToken) {
+    public void fetchUserData(HttpServletRequest request,HttpServletResponse response,String accessToken) {
 
         String uri = UriComponentsBuilder.fromUriString(userInfoUri)
                 .queryParam("fields", fields)
@@ -117,21 +118,20 @@ public class MetaService {
         Authentication auth = new UsernamePasswordAuthenticationToken(
                 user,
                 null,
-                List.of(new SimpleGrantedAuthority("ROLE_USER"))
+                List.of(new SimpleGrantedAuthority("USER"))
         );
 
-        HttpSession session = request.getSession();
         SecurityContext context = SecurityContextHolder.createEmptyContext();
         context.setAuthentication(auth);
         SecurityContextHolder.setContext(context);
 
-        session.setAttribute(
-                HttpSessionSecurityContextRepository.SPRING_SECURITY_CONTEXT_KEY,
-                context
-        );
+        HttpSessionSecurityContextRepository repo = new HttpSessionSecurityContextRepository();
+        repo.saveContext(context, request, response);
 
-        return user;
+    }
 
+    public FacebookUser getUser(String accessToken){
+        return SecurityContextHolder.getContext().getAuthentication().getPrincipal() == null ? new FacebookUser() : (FacebookUser) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
     }
 
     public  String getAccessToken(HttpServletRequest request) {
